@@ -13,7 +13,7 @@ class FileServer {
     this.server.listen(port);
     this.rootPath_ = rootPath;
     this.filesFolder = 'files';
-    this.postLimit = 1024 * 1024;
+    this.postLimit = 1024 ** 2;
   }
 
   requestHandler(req, res) {
@@ -104,11 +104,10 @@ class FileServer {
 
   sendFile(filePath, res) {
     const file = new fs.ReadStream(filePath);
-    res.setHeader('Content-Type', mime.lookup(filePath));
+    file.pipe(res);
+    file.on('open', () => res.setHeader('Content-Type', mime.lookup(filePath)));
     file.on('error', () => this.onErrorHandler(res, 500));
     res.on('close', () => file.destroy());
-
-    file.pipe(res);
   }
 
   deleteFile(pathname, res) {
@@ -124,22 +123,20 @@ class FileServer {
 
   //  file should NOT be present
   writeFile(pathname, req, res) {
-    let file;
+    if (req.headers['content-length'] > this.postLimit) {
+      this.onErrorHandler(res, 413);
+      return;
+    }
+
     const filePath = this.getFilePath(pathname, this.filesFolder);
-
-    file = fs.createWriteStream(filePath, {flags: 'wx+'});
-
-    file.on('error', ({code}) => {
-      if (code !== 'EEXIST') {
-        this.deleteFileOnFailedPost(filePath);
-      }
-      this.onErrorHandler(res, 409);
-    });
+    const file = fs.createWriteStream(filePath, {flags: 'wx'});
+    req.pipe(file);
 
     let totalBytes = 0;
 
     req.on('data', ({length}) => {
       if ((totalBytes += length) > this.postLimit) {
+        res.setHeader('Connection', 'close');
         file.destroy();
         this.deleteFileOnFailedPost(filePath);
         this.onErrorHandler(res, 413);
@@ -151,9 +148,14 @@ class FileServer {
       this.deleteFileOnFailedPost(filePath);
     });
 
-    req.pipe(file);
+    file.on('error', ({code}) => {
+      if (code !== 'EEXIST') {
+        this.deleteFileOnFailedPost(filePath);
+      }
+      this.onErrorHandler(res, 409);
+    });
 
-    file.on('finish', () => this.onSuccesHandler(res));
+    file.on('close', () => this.onSuccesHandler(res));
   }
 
   getFilePath(pathname, folder = '') {
@@ -170,7 +172,9 @@ class FileServer {
   }
 
   onErrorHandler(res, code, message) {
-    res.statusCode = code;
+    if (!res.headersSent) {
+      res.statusCode = code;
+    }
     res.end(message || FileServer.errorDescriptions[code] || '');
   }
 }

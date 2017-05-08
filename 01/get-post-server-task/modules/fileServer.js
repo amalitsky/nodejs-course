@@ -7,13 +7,21 @@ const {Server} = require('http');
 const mime = require('mime');
 
 class FileServer {
-  constructor(port, rootPath) {
+  constructor(port) {
     this.server = new Server();
     this.server.on('request', this.requestHandler.bind(this));
-    this.server.listen(port);
-    this.rootPath_ = rootPath;
+    this.port = port;
+    this.rootPath_ = path.join(__dirname, '..', 'public');
     this.filesFolder = 'files';
     this.postLimit = 1024 ** 2;
+  }
+
+  listen(callback) {
+    this.server.listen(this.port, callback);
+  }
+
+  close(callback) {
+    this.server.close(callback);
   }
 
   requestHandler(req, res) {
@@ -112,18 +120,19 @@ class FileServer {
 
   deleteFile(pathname, res) {
     deleteFileAsync(this.getFilePath(pathname, this.filesFolder))
-        .then(() => this.onSuccesHandler(res))
+        .then(() => this.onSuccessHandler(res))
         .catch(() => this.onErrorHandler(res, 500));
   }
 
   //  don't care about error handling here
   deleteFileOnFailedPost(filePath) {
-    fs.unlink(filePath, err => console.log(err));
+    fs.unlink(filePath, err => err && console.log(err));
   }
 
   //  file should NOT be present
   writeFile(pathname, req, res) {
     if (req.headers['content-length'] > this.postLimit) {
+      res.setHeader('Connection', 'close');
       this.onErrorHandler(res, 413);
       return;
     }
@@ -137,9 +146,9 @@ class FileServer {
     req.on('data', ({length}) => {
       if ((totalBytes += length) > this.postLimit) {
         res.setHeader('Connection', 'close');
+        this.onErrorHandler(res, 413);
         file.destroy();
         this.deleteFileOnFailedPost(filePath);
-        this.onErrorHandler(res, 413);
       }
     });
 
@@ -155,7 +164,7 @@ class FileServer {
       this.onErrorHandler(res, 409);
     });
 
-    file.on('close', () => this.onSuccesHandler(res));
+    file.on('close', () => this.onSuccessHandler(res));
   }
 
   getFilePath(pathname, folder = '') {
@@ -166,8 +175,10 @@ class FileServer {
     this.onErrorHandler(res, 502);
   }
 
-  onSuccesHandler(res, code = 200, message = 'OK') {
-    res.statusCode = code;
+  onSuccessHandler(res, code = 200, message = 'OK') {
+    if (!res.headersSent) {
+      res.statusCode = code;
+    }
     res.end(message);
   }
 

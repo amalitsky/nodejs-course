@@ -4,11 +4,11 @@ const http = require('http');
 const fs = require('fs');
 
 let clients = [];
-
 http.createServer((req, res) => {
+  const urlPath = url.parse(req).pathname;
 
   //  FIXME bad URL characters handling
-  switch (req.method + ' ' + req.url) {
+  switch (req.method + ' ' + urlPath) {
     case 'GET /':
       // FIXME error handling, no res.end() or res.on('close')
       fs.createReadStream('index.html').pipe(res);
@@ -25,6 +25,7 @@ http.createServer((req, res) => {
 
       req
           .on('data', data => {
+            // body size
             body += data;
           })
           // FIXME .on('close') event handler

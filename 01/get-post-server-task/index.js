@@ -27,6 +27,6 @@
 
 'use strict';
 const FileServer = require('./modules/fileServer');
-const path = require('path');
 
-const fileServer = new FileServer(3000, path.join(__dirname, 'public'));
+const fileServer = new FileServer(3000);
+fileServer.listen();

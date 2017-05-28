@@ -6,7 +6,11 @@
   "rules": {
     "mocha/no-exclusive-tests": "error"
   },
+  "parserOptions": {
+    "ecmaVersion": 8
+  },
   "env": {
+    "node": true,
     "mocha": true
   }
 }
